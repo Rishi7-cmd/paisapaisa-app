@@ -1,16 +1,12 @@
 
 import streamlit as st
 import pandas as pd
-import os
 from io import BytesIO
 from openpyxl import Workbook
-from openpyxl.styles import PatternFill
+from openpyxl.styles import Alignment, PatternFill
 
-st.set_page_config(page_title="Paisa Paisa App", page_icon="💸", layout="wide")
-st.markdown(
-    "<h1 style='text-align: center; color: #FFD700;'>💡 Paisa Paisa Transaction Flow Analyzer</h1>",
-    unsafe_allow_html=True
-)
+st.set_page_config(page_title="Paisa Paisa Flowchart", page_icon="📊", layout="wide")
+st.markdown("<h1 style='text-align: center; color: #FFD700;'>📊 Paisa Paisa Transaction Flowchart</h1>", unsafe_allow_html=True)
 
 uploaded_file = st.file_uploader("📂 Upload the input Excel file", type=["xlsx"])
 
@@ -21,76 +17,78 @@ def match_column(possible_matches, df_columns):
                 return col
     return None
 
+def format_account(row, amount_col):
+    lines = []
+    if 'Bank' in row:
+        lines.append(f"Bank: {row['Bank']}")
+    if 'A/c No' in row:
+        lines.append(f"A/c No: {row['A/c No']}")
+    if 'IFSC' in row:
+        lines.append(f"IFSC: {row['IFSC']}")
+    amount = row.get(amount_col, None)
+    if amount and pd.notna(amount):
+        lines.append(f"Amount: ₹{amount:,.0f}")
+    return "\n".join(lines)
+
 if uploaded_file:
     df = pd.read_excel(uploaded_file)
 
-    # Flexible column name detection
     sender_col = match_column(["Sender account", "Account No./ (Wallet /PG/PA) Id"], df.columns)
     receiver_col = match_column(["Receiver account", "Account No"], df.columns)
     txn_amt_col = match_column(["Transaction Amount", "Amount"], df.columns)
+    bank_col = match_column(["Bank/FIs", "Bank"], df.columns)
+    ifsc_col = match_column(["IFSC Code", "Ifsc Code"], df.columns)
 
     if not sender_col or not receiver_col or not txn_amt_col:
-        st.error("❌ Required columns not found in your file.")
-        st.write("Required (flexible match):")
-        st.code("Sender account → e.g., 'Account No./ (Wallet /PG/PA) Id'\nReceiver account → e.g., 'Account No'\nTransaction Amount → e.g., 'Transaction Amount'", language="text")
+        st.error("❌ Required columns not found.")
         st.stop()
 
-    # Clean and filter
     df[txn_amt_col] = pd.to_numeric(
-        df[txn_amt_col]
-        .astype(str)
-        .str.replace(",", "", regex=False)
-        .str.replace("₹", "", regex=False)
-        .str.strip(),
+        df[txn_amt_col].astype(str).str.replace(",", "").str.replace("₹", "").str.strip(),
         errors="coerce"
     )
     df = df[df[txn_amt_col] > 50000]
 
-    if df.empty:
-        st.warning("⚠️ No transactions above ₹50,000 found after filtering.")
-        st.stop()
+    if bank_col: df["Bank"] = df[bank_col]
+    if ifsc_col: df["IFSC"] = df[ifsc_col]
+    df["A/c No"] = df[receiver_col]
 
     victim = df[sender_col].value_counts().idxmax()
     layer1_df = df[df[sender_col] == victim]
     layer1_receivers = layer1_df[receiver_col].unique()
 
-    output_data = []
-    for l1 in layer1_receivers:
-        l1_trans = df[df[sender_col] == l1]
-        layer2_receivers = l1_trans[receiver_col].unique()
-        l2_data = []
-
-        for l2 in layer2_receivers:
-            wd = df[(df[sender_col] == l2) & (df[receiver_col].isna())]
-            if not wd.empty:
-                amount = wd[txn_amt_col].sum()
-                highlight = "⚠️" if amount > 100000 else ""
-                l2_data.append(f"{l2}\n💰 {amount}{highlight}")
-
-        if l2_data:
-            output_data.append([f"{victim}", f"{l1}", "\n\n".join(l2_data)])
-
-    # Excel output
     wb = Workbook()
     ws = wb.active
-    ws.title = "Layered Flow"
+    ws.title = "Flowchart"
+    ws["A1"] = f"Victim: {victim}"
+    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=50)
 
-    ws.append(["Victim", "Layer 1", "Layer 2 + Withdrawals"])
-    for row in output_data:
-        ws.append(row)
+    col_pos = 1
+    for l1 in layer1_receivers:
+        row_pos = 2
+        l1_row = df[df[receiver_col] == l1].iloc[0]
+        l1_text = format_account(l1_row, txn_amt_col)
+        ws.cell(row=row_pos, column=col_pos, value=l1_text)
+        ws.cell(row=row_pos + 1, column=col_pos, value="↓")
 
-    # Highlight large withdrawals
-    yellow_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
-    for row in ws.iter_rows(min_row=2, max_col=3):
-        if "⚠️" in str(row[2].value):
-            for cell in row:
-                cell.fill = yellow_fill
+        l2_df = df[df[sender_col] == l1]
+        for _, l2_row in l2_df.iterrows():
+            acct_text = format_account(l2_row, txn_amt_col)
+            ws.cell(row=row_pos + 2, column=col_pos, value=acct_text)
+            ws.cell(row=row_pos + 3, column=col_pos, value="↓")
+            row_pos += 2
+
+        col_pos += 2
+
+    for col in ws.columns:
+        for cell in col:
+            cell.alignment = Alignment(wrap_text=True, vertical='center', horizontal='center')
 
     output = BytesIO()
     wb.save(output)
     output.seek(0)
-    out_filename = uploaded_file.name.replace(".xlsx", "_output.xlsx")
+    filename = uploaded_file.name.replace(".xlsx", "_flowchart.xlsx")
 
-    st.success("✅ Analysis complete! Download your output Excel file below:")
-    st.download_button("📥 Download Output Excel", output, file_name=out_filename,
+    st.success("✅ Flowchart created. Download below:")
+    st.download_button("📥 Download Excel Flowchart", data=output, file_name=filename,
                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
