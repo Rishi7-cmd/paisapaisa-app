@@ -6,7 +6,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment
 
 st.set_page_config(page_title="Paisa Paisa Flowchart", page_icon="📊", layout="wide")
-st.markdown("<h1 style='text-align: center; color: #FFD700;'>📊 Paisa Paisa L1 → L2 → Withdrawal Flowchart</h1>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align: center; color: #FFD700;'>📊 Unique Flowchart: Victim → L1 → L2 → Withdrawal</h1>", unsafe_allow_html=True)
 
 uploaded_file = st.file_uploader("📂 Upload Excel File", type=["xlsx"])
 
@@ -49,31 +49,43 @@ if uploaded_file:
     ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=50)
     ws.cell(row=1, column=1, value=f"Victim: {victim}")
 
+    seen_l1 = set()
+    seen_l2 = set()
     col = 1
-    layer1_df = df[df[sender_col] == victim]
+
+    layer1_df = df[df[sender_col] == victim].drop_duplicates(subset=receiver_col)
     for _, l1_row in layer1_df.iterrows():
-        row = 3
         l1_receiver = l1_row[receiver_col]
+        if l1_receiver in seen_l1:
+            continue
+        seen_l1.add(l1_receiver)
+
+        row = 3
         l1_text = format_block(l1_row, bank_col, receiver_col, ifsc_col, l1_row[amount_col], "Sent")
         ws.cell(row=row, column=col, value=l1_text)
         ws.cell(row=row+1, column=col, value="↓")
 
-        l2_df = df[df[sender_col] == l1_receiver]
-        for _, l2_row in l2_df.iterrows():
+        layer2_df = df[df[sender_col] == l1_receiver].drop_duplicates(subset=receiver_col)
+        for _, l2_row in layer2_df.iterrows():
+            l2_receiver = l2_row[receiver_col]
+            if l2_receiver in seen_l2:
+                continue
+            seen_l2.add(l2_receiver)
+
             l2_text = format_block(l2_row, bank_col, receiver_col, ifsc_col, l2_row[amount_col], "Received")
             ws.cell(row=row+2, column=col, value=l2_text)
             ws.cell(row=row+3, column=col, value="↓")
             row += 4
 
-            # Withdrawal tracing
-            l2_receiver = l2_row[receiver_col]
-            withdrawal_df = df[(df[sender_col] == l2_receiver) & (df[receiver_col].isna())]
-            for _, wd in withdrawal_df.iterrows():
-                wd_text = f"💸 Withdrawal Made\nFrom: Layer 2\nA/c No: {l2_receiver}\nAmount: ₹{int(wd[amount_col]):,}"
+            # Withdrawal under this L2
+            wd_df = df[(df[sender_col] == l2_receiver) & (df[receiver_col].isna())]
+            for _, wd in wd_df.iterrows():
+                amt = wd[amount_col]
+                wd_text = f"💸 Withdrawal Made\nFrom: Layer 2\nA/c No: {l2_receiver}\nAmount: ₹{int(amt):,}"
                 ws.cell(row=row, column=col, value=wd_text)
                 row += 2
 
-        col += 2  # Next L1 flow in new column
+        col += 2
 
     for c in ws.columns:
         for cell in c:
@@ -82,7 +94,7 @@ if uploaded_file:
     output = BytesIO()
     wb.save(output)
     output.seek(0)
-    final_name = uploaded_file.name.replace(".xlsx", "_final_flowchart.xlsx")
-    st.success("✅ Done! Download your flowchart below:")
-    st.download_button("📥 Download Flowchart Excel", data=output, file_name=final_name,
+    outname = uploaded_file.name.replace(".xlsx", "_final_unique_flowchart.xlsx")
+    st.success("✅ Done! Download below:")
+    st.download_button("📥 Download Unique Flowchart Excel", data=output, file_name=outname,
                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
