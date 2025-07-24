@@ -18,8 +18,26 @@ uploaded_file = st.file_uploader("📂 Upload the input Excel file", type=["xlsx
 if uploaded_file:
     input_df = pd.read_excel(uploaded_file)
 
+    if "Transaction Amount" not in input_df.columns:
+        st.error("❌ 'Transaction Amount' column missing in the uploaded file.")
+        st.stop()
+
+    # Convert 'Transaction Amount' to numeric after cleaning
+    input_df["Transaction Amount"] = pd.to_numeric(
+        input_df["Transaction Amount"]
+        .astype(str)
+        .str.replace(",", "", regex=False)
+        .str.replace("₹", "", regex=False)
+        .str.strip(),
+        errors="coerce"
+    )
+
     # FILTERS
     input_df = input_df[input_df["Transaction Amount"] > 50000]
+
+    if input_df.empty:
+        st.warning("⚠️ No transactions above ₹50,000 found after filtering.")
+        st.stop()
 
     # Grouping and tracing logic
     victim = input_df["Sender account"].value_counts().idxmax()
