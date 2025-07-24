@@ -7,7 +7,6 @@ from openpyxl import Workbook
 from openpyxl.styles import PatternFill
 
 st.set_page_config(page_title="Paisa Paisa App", page_icon="💸", layout="wide")
-
 st.markdown(
     "<h1 style='text-align: center; color: #FFD700;'>💡 Paisa Paisa Transaction Flow Analyzer</h1>",
     unsafe_allow_html=True
@@ -15,68 +14,74 @@ st.markdown(
 
 uploaded_file = st.file_uploader("📂 Upload the input Excel file", type=["xlsx"])
 
-if uploaded_file:
-    input_df = pd.read_excel(uploaded_file)
+def match_column(possible_matches, df_columns):
+    for match in possible_matches:
+        for col in df_columns:
+            if match.lower() in col.lower():
+                return col
+    return None
 
-    if "Transaction Amount" not in input_df.columns:
-        st.error("❌ 'Transaction Amount' column missing in the uploaded file.")
+if uploaded_file:
+    df = pd.read_excel(uploaded_file)
+
+    # Flexible column name detection
+    sender_col = match_column(["Sender account", "Account No./ (Wallet /PG/PA) Id"], df.columns)
+    receiver_col = match_column(["Receiver account", "Account No"], df.columns)
+    txn_amt_col = match_column(["Transaction Amount", "Amount"], df.columns)
+
+    if not sender_col or not receiver_col or not txn_amt_col:
+        st.error("❌ Required columns not found in your file.")
+        st.write("Required (flexible match):")
+        st.code("Sender account → e.g., 'Account No./ (Wallet /PG/PA) Id'\nReceiver account → e.g., 'Account No'\nTransaction Amount → e.g., 'Transaction Amount'", language="text")
         st.stop()
 
-    # Convert 'Transaction Amount' to numeric after cleaning
-    input_df["Transaction Amount"] = pd.to_numeric(
-        input_df["Transaction Amount"]
+    # Clean and filter
+    df[txn_amt_col] = pd.to_numeric(
+        df[txn_amt_col]
         .astype(str)
         .str.replace(",", "", regex=False)
         .str.replace("₹", "", regex=False)
         .str.strip(),
         errors="coerce"
     )
+    df = df[df[txn_amt_col] > 50000]
 
-    # FILTERS
-    input_df = input_df[input_df["Transaction Amount"] > 50000]
-
-    if input_df.empty:
+    if df.empty:
         st.warning("⚠️ No transactions above ₹50,000 found after filtering.")
         st.stop()
 
-    # Grouping and tracing logic
-    victim = input_df["Sender account"].value_counts().idxmax()
-    layer1_df = input_df[input_df["Sender account"] == victim]
-    layer1_receivers = layer1_df["Receiver account"].unique()
+    victim = df[sender_col].value_counts().idxmax()
+    layer1_df = df[df[sender_col] == victim]
+    layer1_receivers = layer1_df[receiver_col].unique()
 
     output_data = []
-    withdrawals = []
-
     for l1 in layer1_receivers:
-        l1_trans = input_df[input_df["Sender account"] == l1]
-        layer2_receivers = l1_trans["Receiver account"].unique()
+        l1_trans = df[df[sender_col] == l1]
+        layer2_receivers = l1_trans[receiver_col].unique()
         l2_data = []
 
         for l2 in layer2_receivers:
-            wd = input_df[(input_df["Sender account"] == l2) & (input_df["Receiver account"].isna())]
+            wd = df[(df[sender_col] == l2) & (df[receiver_col].isna())]
             if not wd.empty:
-                amount = wd["Amount"].sum()
+                amount = wd[txn_amt_col].sum()
                 highlight = "⚠️" if amount > 100000 else ""
                 l2_data.append(f"{l2}\n💰 {amount}{highlight}")
-                withdrawals.append((l2, amount))
 
         if l2_data:
             output_data.append([f"{victim}", f"{l1}", "\n\n".join(l2_data)])
 
-    # Create Excel output
+    # Excel output
     wb = Workbook()
     ws = wb.active
     ws.title = "Layered Flow"
 
-    headers = ["Victim", "Layer 1", "Layer 2 + Withdrawals"]
-    ws.append(headers)
-
+    ws.append(["Victim", "Layer 1", "Layer 2 + Withdrawals"])
     for row in output_data:
         ws.append(row)
 
-    # Highlight withdrawals > 1 lakh
+    # Highlight large withdrawals
     yellow_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
-    for idx, row in enumerate(ws.iter_rows(min_row=2, max_col=3), start=2):
+    for row in ws.iter_rows(min_row=2, max_col=3):
         if "⚠️" in str(row[2].value):
             for cell in row:
                 cell.fill = yellow_fill
@@ -84,10 +89,8 @@ if uploaded_file:
     output = BytesIO()
     wb.save(output)
     output.seek(0)
+    out_filename = uploaded_file.name.replace(".xlsx", "_output.xlsx")
 
-    output_filename = uploaded_file.name.replace(".xlsx", "_output.xlsx")
     st.success("✅ Analysis complete! Download your output Excel file below:")
-    st.download_button(label="📥 Download Output Excel",
-                       data=output,
-                       file_name=output_filename,
+    st.download_button("📥 Download Output Excel", output, file_name=out_filename,
                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
