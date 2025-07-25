@@ -106,26 +106,21 @@ def generate_flowchart(df, output_path):
 
 st.set_page_config(page_title="Paisa Paisa 💸", layout="centered")
 
-# Diwali lights background CSS
+# Diwali lights background CSS (full digital light theme)
 st.markdown("""
 <style>
 body {
-    background-color: #0d0d0d;
-    background-image:
-        radial-gradient(circle at 10% 20%, #ffcc00 3px, transparent 3px),
-        radial-gradient(circle at 20% 80%, #ff9900 3px, transparent 3px),
-        radial-gradient(circle at 90% 25%, #ffaa33 3px, transparent 3px),
-        radial-gradient(circle at 70% 60%, #ffcc66 3px, transparent 3px),
-        radial-gradient(circle at 50% 90%, #ffd700 3px, transparent 3px),
-        radial-gradient(circle at 80% 10%, #ffae42 3px, transparent 3px);
-    background-size: 100% 100%;
-    animation: twinkle 4s infinite ease-in-out;
+    background-image: url('https://cdn.pixabay.com/photo/2022/09/13/11/29/lights-7451475_1280.jpg');
+    background-size: cover;
+    background-attachment: fixed;
+    background-repeat: no-repeat;
     color: white;
 }
-@keyframes twinkle {
-  0% { opacity: 0.95; }
-  50% { opacity: 0.7; }
-  100% { opacity: 0.95; }
+[data-testid="stAppViewContainer"] > .main {
+    background: rgba(0, 0, 0, 0.75);
+    padding: 2rem;
+    border-radius: 12px;
+    box-shadow: 0 0 30px rgba(255, 215, 0, 0.6);
 }
 </style>
 """, unsafe_allow_html=True)
