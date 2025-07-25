@@ -28,7 +28,6 @@ def generate_flowchart(df, output_path):
     ws = wb.active
     ws.title = "Flowchart"
 
-    # Styles
     align_center = Alignment(horizontal='center', vertical='center', wrap_text=True)
     fill_blue = PatternFill(start_color='BDD7EE', end_color='BDD7EE', fill_type='solid')
     fill_green = PatternFill(start_color='C6EFCE', end_color='C6EFCE', fill_type='solid')
@@ -106,21 +105,31 @@ def generate_flowchart(df, output_path):
 
 st.set_page_config(page_title="Paisa Paisa 💸", layout="centered")
 
-# Diwali lights background CSS (full digital light theme)
+# Diwali lights festive background
 st.markdown("""
 <style>
 body {
-    background-image: url('https://cdn.pixabay.com/photo/2022/09/13/11/29/lights-7451475_1280.jpg');
-    background-size: cover;
-    background-attachment: fixed;
-    background-repeat: no-repeat;
+    background-color: #0d0d0d;
+    background-image:
+        radial-gradient(circle at 10% 20%, #ffcc00 2px, transparent 0),
+        radial-gradient(circle at 20% 80%, #ff9900 2px, transparent 0),
+        radial-gradient(circle at 90% 25%, #ffaa33 2px, transparent 0),
+        radial-gradient(circle at 70% 60%, #ffcc66 2px, transparent 0),
+        radial-gradient(circle at 50% 90%, #ffd700 2px, transparent 0),
+        radial-gradient(circle at 80% 10%, #ffae42 2px, transparent 0);
+    background-size: 50px 50px;
+    animation: sparkle 5s infinite ease-in-out;
     color: white;
 }
+@keyframes sparkle {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.8; }
+}
 [data-testid="stAppViewContainer"] > .main {
-    background: rgba(0, 0, 0, 0.75);
+    background: rgba(0, 0, 0, 0.85);
     padding: 2rem;
-    border-radius: 12px;
-    box-shadow: 0 0 30px rgba(255, 215, 0, 0.6);
+    border-radius: 14px;
+    box-shadow: 0 0 30px rgba(255, 223, 0, 0.6);
 }
 </style>
 """, unsafe_allow_html=True)
