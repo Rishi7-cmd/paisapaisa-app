@@ -1,4 +1,3 @@
-
 import streamlit as st
 import pandas as pd
 from openpyxl import Workbook
@@ -7,13 +6,13 @@ from openpyxl.utils import get_column_letter
 import tempfile
 
 def generate_flowchart(df, output_path):
-    df = df.rename(columns={{
+    df = df.rename(columns={
         'Account No./ (Wallet /PG/PA) Id': 'Sender',
         'Account No': 'Receiver',
         'Transaction Amount': 'Amount',
         'Bank/FIs': 'Bank',
         'Ifsc Code': 'IFSC'
-    }})
+    })
 
     df['Amount'] = pd.to_numeric(
         df['Amount'].astype(str).str.replace(",", "").str.replace("₹", ""),
@@ -29,7 +28,6 @@ def generate_flowchart(df, output_path):
     ws = wb.active
     ws.title = "Flowchart"
 
-    # Styles
     align_center = Alignment(horizontal='center', vertical='center', wrap_text=True)
     fill_blue = PatternFill(start_color='BDD7EE', end_color='BDD7EE', fill_type='solid')
     fill_green = PatternFill(start_color='C6EFCE', end_color='C6EFCE', fill_type='solid')
@@ -39,7 +37,7 @@ def generate_flowchart(df, output_path):
 
     colspan = len(unique_l1) * 2 - 1
     ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=max(colspan, 1))
-    vcell = ws.cell(row=1, column=1, value=f"Victim: {{victim}}")
+    vcell = ws.cell(row=1, column=1, value=f"Victim: {victim}")
     vcell.fill = fill_blue
     vcell.alignment = align_center
     vcell.font = Font(bold=True)
@@ -51,7 +49,7 @@ def generate_flowchart(df, output_path):
         row += 1
 
         l1_txn = df[(df['Sender'] == victim) & (df['Receiver'] == l1)].iloc[0]
-        l1_text = f"Layer 1 Account\nBank: {{l1_txn['Bank']}}\nA/c No: {{l1}}\nIFSC: {{l1_txn['IFSC']}}\nSent: ₹{{int(l1_txn['Amount']):,}}"
+        l1_text = f"Layer 1 Account\nBank: {l1_txn['Bank']}\nA/c No: {l1}\nIFSC: {l1_txn['IFSC']}\nSent: ₹{int(l1_txn['Amount']):,}"
         cell = ws.cell(row=row, column=col, value=l1_text)
         cell.fill = fill_green
         cell.alignment = align_center
@@ -64,7 +62,7 @@ def generate_flowchart(df, output_path):
         l1_withdrawals = df[(df['Sender'] == l1) & (df['Receiver'].isna())]
         for _, wd in l1_withdrawals.iterrows():
             amt = wd['Amount']
-            text = f"💸 Withdrawal Made\nFrom: Layer 1\nA/c No: {{l1}}\nAmount: ₹{{int(amt):,}}"
+            text = f"💸 Withdrawal Made\nFrom: Layer 1\nA/c No: {l1}\nAmount: ₹{int(amt):,}"
             cell = ws.cell(row=row, column=col, value=text)
             cell.fill = fill_yellow if amt <= 100000 else fill_red
             cell.alignment = align_center
@@ -77,7 +75,7 @@ def generate_flowchart(df, output_path):
             if pd.isna(l2):
                 continue
 
-            l2_text = f"Layer 2 Account\nBank: {{l2_row['Bank']}}\nA/c No: {{l2}}\nIFSC: {{l2_row['IFSC']}}\nReceived: ₹{{int(l2_row['Amount']):,}}"
+            l2_text = f"Layer 2 Account\nBank: {l2_row['Bank']}\nA/c No: {l2}\nIFSC: {l2_row['IFSC']}\nReceived: ₹{int(l2_row['Amount']):,}"
             cell = ws.cell(row=row, column=col, value=l2_text)
             cell.fill = fill_violet
             cell.alignment = align_center
@@ -90,7 +88,7 @@ def generate_flowchart(df, output_path):
             wd_df = df[(df['Sender'] == l2) & (df['Receiver'].isna())]
             for _, wd in wd_df.iterrows():
                 amt = wd['Amount']
-                text = f"💸 Withdrawal Made\nFrom: Layer 2\nA/c No: {{l2}}\nAmount: ₹{{int(amt):,}}"
+                text = f"💸 Withdrawal Made\nFrom: Layer 2\nA/c No: {l2}\nAmount: ₹{int(amt):,}"
                 cell = ws.cell(row=row, column=col, value=text)
                 cell.fill = fill_yellow if amt <= 100000 else fill_red
                 cell.alignment = align_center
@@ -107,22 +105,32 @@ def generate_flowchart(df, output_path):
 
 st.set_page_config(page_title="Paisa Paisa 💸", layout="centered")
 
-# Brighter Diwali background CSS
+# Diwali lights festive background
 st.markdown("""
 <style>
-body {{
-    background-image: url('https://cdn.pixabay.com/photo/2018/11/06/06/04/diwali-3794961_1280.jpg');
-    background-size: cover;
-    background-attachment: fixed;
-    background-repeat: no-repeat;
-    color: #fff;
-}}
-[data-testid="stAppViewContainer"] > .main {{
-    background: rgba(0, 0, 0, 0.3);
+body {
+    background-color: #0d0d0d;
+    background-image:
+        radial-gradient(circle at 10% 20%, #ffcc00 2px, transparent 0),
+        radial-gradient(circle at 20% 80%, #ff9900 2px, transparent 0),
+        radial-gradient(circle at 90% 25%, #ffaa33 2px, transparent 0),
+        radial-gradient(circle at 70% 60%, #ffcc66 2px, transparent 0),
+        radial-gradient(circle at 50% 90%, #ffd700 2px, transparent 0),
+        radial-gradient(circle at 80% 10%, #ffae42 2px, transparent 0);
+    background-size: 50px 50px;
+    animation: sparkle 5s infinite ease-in-out;
+    color: white;
+}
+@keyframes sparkle {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.8; }
+}
+[data-testid="stAppViewContainer"] > .main {
+    background: rgba(0, 0, 0, 0.85);
     padding: 2rem;
-    border-radius: 12px;
-    box-shadow: 0 0 30px rgba(255, 215, 0, 0.6);
-}}
+    border-radius: 14px;
+    box-shadow: 0 0 30px rgba(255, 223, 0, 0.6);
+}
 </style>
 """, unsafe_allow_html=True)
 
