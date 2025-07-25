@@ -106,22 +106,33 @@ def generate_flowchart(df, output_path):
 
 st.set_page_config(page_title="Paisa Paisa 💸", layout="centered")
 
-# Diwali background
+# Diwali lights background CSS
 st.markdown("""
 <style>
 body {
-    background-color: #0a0a0a;
-    background-image: radial-gradient(#ffcc00 1px, transparent 1px),
-                      radial-gradient(#ff6600 1px, transparent 1px);
-    background-size: 30px 30px;
-    background-position: 0 0, 15px 15px;
+    background-color: #0d0d0d;
+    background-image:
+        radial-gradient(circle at 10% 20%, #ffcc00 3px, transparent 3px),
+        radial-gradient(circle at 20% 80%, #ff9900 3px, transparent 3px),
+        radial-gradient(circle at 90% 25%, #ffaa33 3px, transparent 3px),
+        radial-gradient(circle at 70% 60%, #ffcc66 3px, transparent 3px),
+        radial-gradient(circle at 50% 90%, #ffd700 3px, transparent 3px),
+        radial-gradient(circle at 80% 10%, #ffae42 3px, transparent 3px);
+    background-size: 100% 100%;
+    animation: twinkle 4s infinite ease-in-out;
     color: white;
+}
+@keyframes twinkle {
+  0% { opacity: 0.95; }
+  50% { opacity: 0.7; }
+  100% { opacity: 0.95; }
 }
 </style>
 """, unsafe_allow_html=True)
 
+# App UI
 st.title("🪔 Paisa Paisa Flowchart Generator")
-st.markdown("Upload your Excel transaction sheet to visualize the layered money trail with withdrawals.")
+st.markdown("Upload your Excel transaction sheet to visualize money trail layers and withdrawals with full styling.")
 
 uploaded_file = st.file_uploader("📤 Upload Excel File", type=["xlsx"])
 if uploaded_file:
