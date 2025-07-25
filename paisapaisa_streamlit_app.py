@@ -1,46 +1,28 @@
-
 import streamlit as st
 import pandas as pd
-from io import BytesIO
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, PatternFill, Font
+from openpyxl.utils import get_column_letter
+import tempfile
 
-st.set_page_config(page_title="Paisa Paisa Final Flowchart", page_icon="📊", layout="wide")
-st.markdown("<h1 style='text-align: center; color: #FFD700;'>📊 Final Stylized Flowchart: Victim → L1 → L2 → Withdrawal</h1>", unsafe_allow_html=True)
+def generate_flowchart(df, output_path):
+    df = df.rename(columns={
+        'Account No./ (Wallet /PG/PA) Id': 'Sender',
+        'Account No': 'Receiver',
+        'Transaction Amount': 'Amount',
+        'Bank/FIs': 'Bank',
+        'Ifsc Code': 'IFSC'
+    })
 
-uploaded_file = st.file_uploader("📂 Upload Excel File", type=["xlsx"])
+    df['Amount'] = pd.to_numeric(
+        df['Amount'].astype(str).str.replace(",", "").str.replace("₹", ""),
+        errors='coerce'
+    )
+    df = df[df['Amount'] > 50000]
 
-def match_column(possibles, columns):
-    for option in possibles:
-        for col in columns:
-            if option.lower() in col.lower():
-                return col
-    return None
-
-def format_block(row, bank_col, acct_col, ifsc_col, amount, label):
-    parts = []
-    if bank_col and row.get(bank_col): parts.append(f"Bank: {row[bank_col]}")
-    if acct_col and row.get(acct_col): parts.append(f"A/c No: {row[acct_col]}")
-    if ifsc_col and row.get(ifsc_col): parts.append(f"IFSC: {row[ifsc_col]}")
-    parts.append(f"Amount {label}: ₹{int(amount):,}")
-    return "\n".join(parts)
-
-if uploaded_file:
-    df = pd.read_excel(uploaded_file)
-
-    sender_col = match_column(["Sender", "Account No./ (Wallet /PG/PA) Id"], df.columns)
-    receiver_col = match_column(["Receiver", "Account No"], df.columns)
-    amount_col = match_column(["Transaction Amount", "Amount"], df.columns)
-    bank_col = match_column(["Bank/FIs", "Bank"], df.columns)
-    ifsc_col = match_column(["IFSC Code", "Ifsc Code"], df.columns)
-
-    if not sender_col or not receiver_col or not amount_col:
-        st.error("❌ Missing required columns.")
-        st.stop()
-
-    df[amount_col] = pd.to_numeric(df[amount_col].astype(str).str.replace(",", "").str.replace("₹", ""), errors="coerce")
-    df = df[df[amount_col] > 50000]
-    victim = df[sender_col].value_counts().idxmax()
+    victim = df['Sender'].value_counts().idxmax()
+    layer1_df = df[(df['Sender'] == victim) & (df['Receiver'].notna())]
+    unique_l1 = layer1_df['Receiver'].unique().tolist()
 
     wb = Workbook()
     ws = wb.active
@@ -54,72 +36,99 @@ if uploaded_file:
     fill_yellow = PatternFill(start_color='FFF2CC', end_color='FFF2CC', fill_type='solid')
     fill_red = PatternFill(start_color='FFC7CE', end_color='FFC7CE', fill_type='solid')
 
-    # Merge victim row across columns
-    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=50)
-    victim_cell = ws.cell(row=1, column=1, value=f"Victim: {victim}")
-    victim_cell.fill = fill_blue
-    victim_cell.alignment = align_center
-    victim_cell.font = Font(bold=True)
+    colspan = len(unique_l1) * 2 - 1
+    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=max(colspan, 1))
+    vcell = ws.cell(row=1, column=1, value=f"Victim: {victim}")
+    vcell.fill = fill_blue
+    vcell.alignment = align_center
+    vcell.font = Font(bold=True)
 
-    start_col = 1
-    used_l1 = set()
-    layer1_df = df[(df[sender_col] == victim) & (df[receiver_col] != victim)]
-
-    for _, l1_row in layer1_df.iterrows():
-        l1_receiver = l1_row[receiver_col]
-        if l1_receiver in used_l1:
-            continue
-        used_l1.add(l1_receiver)
-
+    col = 1
+    for l1 in unique_l1:
         row = 3
-        ws.cell(row=row, column=start_col, value="↓").alignment = align_center
+        ws.cell(row=row, column=col, value="↓").alignment = align_center
         row += 1
 
-        l1_text = format_block(l1_row, bank_col, receiver_col, ifsc_col, l1_row[amount_col], "Sent")
-        cell = ws.cell(row=row, column=start_col, value=l1_text)
+        l1_txn = df[(df['Sender'] == victim) & (df['Receiver'] == l1)].iloc[0]
+        l1_text = f"Layer 1 Account\nBank: {l1_txn['Bank']}\nA/c No: {l1}\nIFSC: {l1_txn['IFSC']}\nSent: ₹{int(l1_txn['Amount']):,}"
+        cell = ws.cell(row=row, column=col, value=l1_text)
         cell.fill = fill_green
         cell.alignment = align_center
         row += 2
 
-        ws.cell(row=row, column=start_col, value="↓").alignment = align_center
+        ws.cell(row=row, column=col, value="↓").alignment = align_center
         row += 1
 
-        used_l2 = set()
-        layer2_df = df[(df[sender_col] == l1_receiver) & (df[receiver_col] != l1_receiver)]
-        for _, l2_row in layer2_df.iterrows():
-            l2_receiver = l2_row[receiver_col]
-            if l2_receiver in used_l2 or l2_receiver == victim or pd.isna(l2_receiver):
-                continue
-            used_l2.add(l2_receiver)
+        # Withdrawals from Layer 1
+        l1_withdrawals = df[(df['Sender'] == l1) & (df['Receiver'].isna())]
+        for _, wd in l1_withdrawals.iterrows():
+            amt = wd['Amount']
+            text = f"💸 Withdrawal Made\nFrom: Layer 1\nA/c No: {l1}\nAmount: ₹{int(amt):,}"
+            cell = ws.cell(row=row, column=col, value=text)
+            cell.fill = fill_yellow if amt <= 100000 else fill_red
+            cell.alignment = align_center
+            row += 2
 
-            l2_text = format_block(l2_row, bank_col, receiver_col, ifsc_col, l2_row[amount_col], "Received")
-            cell = ws.cell(row=row, column=start_col, value=l2_text)
+        # Layer 2 Accounts
+        l2_df = df[(df['Sender'] == l1) & (df['Receiver'].notna())]
+        for _, l2_row in l2_df.iterrows():
+            l2 = l2_row['Receiver']
+            if pd.isna(l2):
+                continue
+
+            l2_text = f"Layer 2 Account\nBank: {l2_row['Bank']}\nA/c No: {l2}\nIFSC: {l2_row['IFSC']}\nReceived: ₹{int(l2_row['Amount']):,}"
+            cell = ws.cell(row=row, column=col, value=l2_text)
             cell.fill = fill_violet
             cell.alignment = align_center
             row += 2
 
-            ws.cell(row=row, column=start_col, value="↓").alignment = align_center
+            ws.cell(row=row, column=col, value="↓").alignment = align_center
             row += 1
 
-            wd_df = df[(df[sender_col] == l2_receiver) & (df[receiver_col].isna())]
+            # Withdrawals from Layer 2
+            wd_df = df[(df['Sender'] == l2) & (df['Receiver'].isna())]
             for _, wd in wd_df.iterrows():
-                amt = wd[amount_col]
-                text = f"💸 Withdrawal Made\nFrom: Layer 2\nA/c No: {l2_receiver}\nAmount: ₹{int(amt):,}"
-                cell = ws.cell(row=row, column=start_col, value=text)
+                amt = wd['Amount']
+                text = f"💸 Withdrawal Made\nFrom: Layer 2\nA/c No: {l2}\nAmount: ₹{int(amt):,}"
+                cell = ws.cell(row=row, column=col, value=text)
                 cell.fill = fill_yellow if amt <= 100000 else fill_red
                 cell.alignment = align_center
                 row += 2
 
-        start_col += 2
+        col += 2
 
-    for col in ws.columns:
-        for cell in col:
-            cell.alignment = align_center
+    for i in range(1, col):
+        ws.column_dimensions[get_column_letter(i)].width = 28
 
-    output = BytesIO()
-    wb.save(output)
-    output.seek(0)
-    outname = uploaded_file.name.replace(".xlsx", "_styled_flowchart.xlsx")
-    st.success("✅ Flowchart generated with full formatting.")
-    st.download_button("📥 Download Flowchart Excel", data=output, file_name=outname,
-                       mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    wb.save(output_path)
+
+# ------------------------ Streamlit UI ----------------------------
+
+st.set_page_config(page_title="Paisa Paisa 💸", layout="centered")
+
+# Diwali background
+st.markdown("""
+<style>
+body {
+    background-color: #0a0a0a;
+    background-image: radial-gradient(#ffcc00 1px, transparent 1px),
+                      radial-gradient(#ff6600 1px, transparent 1px);
+    background-size: 30px 30px;
+    background-position: 0 0, 15px 15px;
+    color: white;
+}
+</style>
+""", unsafe_allow_html=True)
+
+st.title("🪔 Paisa Paisa Flowchart Generator")
+st.markdown("Upload your Excel transaction sheet to visualize the layered money trail with withdrawals.")
+
+uploaded_file = st.file_uploader("📤 Upload Excel File", type=["xlsx"])
+if uploaded_file:
+    df = pd.read_excel(uploaded_file)
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp:
+        output_path = tmp.name
+    generate_flowchart(df, output_path)
+    st.success("✅ Flowchart Generated Successfully!")
+    with open(output_path, "rb") as f:
+        st.download_button("📥 Download Output Excel", f, file_name=uploaded_file.name.replace(".xlsx", "_output.xlsx"))
